@@ -64,25 +64,7 @@ Then set `KB_ROOT` in your shell config:
 export KB_ROOT="$HOME/my-knowledge-base"
 ```
 
-### 3. Install agent integrations
-
-```bash
-kb install
-```
-
-Auto-detects installed agents and installs (with confirmation prompts):
-
-| Agent | What gets installed |
-|---|---|
-| **Claude Code** | `/kb-setup` slash command into `~/.claude/commands/`, PostToolUse auto-commit hook into `~/.claude/settings.json` |
-| **OpenAI Codex** | MCP server config into `~/.codex/config.toml` |
-| **OpenCode** | `file_edited` auto-commit hook, `/kb-setup` skill into `~/.config/opencode/skills/` |
-
-The hooks auto-commit KB changes whenever an agent edits a file inside the knowledge base.
-
-Use `-y` to skip confirmation prompts.
-
-### 4. Configure MCP for a project
+### 3. Configure MCP for a project
 
 From inside a project directory:
 
@@ -274,7 +256,6 @@ Shared docs can be linked in two modes:
 |---|---|
 | `kb` | Launch the TUI browser (default command) |
 | `kb init [--dir PATH]` | Initialize a new knowledge base |
-| `kb install [-y]` | Install agent integrations (hooks, slash commands) |
 | `kb setup [PROJECT] [-y]` | Configure MCP + `@import` pointers for a project |
 | `kb project init <NAME> --path <DIR>` | Create a new project in the KB |
 | `kb project import <NAME> --from <DIR>` | Import existing CLAUDE.md/AGENTS.md into the KB |

@@ -14,17 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const slashCommandContent = `Set up the KB knowledge base MCP server for this project.
-
-Steps:
-1. Run ` + "`kb detect`" + ` to check if this project is already in the knowledge base
-2. If not detected, ask the user for the project name (suggest the directory name) and run ` + "`kb project import <name> --from <cwd>`" + `
-3. Run ` + "`kb setup`" + ` to configure the KB MCP server for this project
-4. Tell the user to restart their editor to connect to the KB MCP server
-
-If any step fails, show the error and suggest how to fix it.
-`
-
 var setupCmd = &cobra.Command{
 	Use:   "setup [project]",
 	Short: "Configure MCP server for a project",
@@ -135,6 +124,19 @@ var setupCmd = &cobra.Command{
 			fmt.Println()
 		}
 
+		// Read existing instruction files before they get overwritten
+		var importContent string
+		if needsRegister {
+			var parts []string
+			for _, mdName := range []string{"CLAUDE.md", "AGENT.md", "AGENTS.md"} {
+				mdPath := filepath.Join(absPath, mdName)
+				if c, err := fs.ReadFile(mdPath); err == nil && strings.TrimSpace(c) != "" {
+					parts = append(parts, c)
+				}
+			}
+			importContent = strings.Join(parts, "\n")
+		}
+
 		// Register project (creates dir, context.md, refs.yml, kb.yml entry)
 		created, err := project.Register(kbRoot, projectName, absPath)
 		if err != nil {
@@ -142,6 +144,21 @@ var setupCmd = &cobra.Command{
 		}
 		if created {
 			fmt.Printf("Registered project %q in KB\n", projectName)
+		}
+
+		// Import existing instruction file content into context.md
+		if created && importContent != "" {
+			kbRelPath := project.KBRelPath(kbRoot, projectName)
+			header := fmt.Sprintf("<!-- KB managed: %s/context.md -->\n<!-- Always edit THIS file for project context. Do NOT edit the repo's CLAUDE.md. -->\n\n", kbRelPath)
+			if err := os.WriteFile(project.ContextPath(kbRoot, projectName), []byte(header+importContent), 0644); err != nil {
+				return fmt.Errorf("importing content: %w", err)
+			}
+			fmt.Printf("Imported existing instruction files into context.md\n")
+		}
+
+		// Regenerate KB:REFS and KB:INLINE blocks (includes globals)
+		if err := project.UpdateRefsInventory(kbRoot, projectName); err != nil {
+			return fmt.Errorf("updating refs inventory: %w", err)
 		}
 
 		// Auto-commit any KB changes
