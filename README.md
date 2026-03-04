@@ -17,6 +17,7 @@ Supports [Claude Code](https://code.claude.com/docs/en/overview), [OpenAI Codex]
 - Per-project context that replaces in-repo CLAUDE.md files
 - Shared docs that multiple projects reference without duplication
 - Global shared docs that are available to all projects automatically
+- Inline mode to embed shared doc content directly into context.md (loaded at session start without MCP calls)
 - Git versioning on every change (auto-committed)
 - An MCP server so agents can search, read, and write docs on-demand
 - A TUI browser for navigating and assigning refs to the knowledge base interactively
@@ -163,9 +164,9 @@ When configured, agents get 15 tools:
 | `kb_diff` | Show uncommitted changes in the knowledge base. |
 | `kb_show` | Read a file's content at a specific commit. |
 | `kb_revert` | Revert a file to a specific commit. Auto-commits the change. |
-| `kb_ref_add` | Link a shared doc to a project. Auto-detects project from cwd. |
+| `kb_ref_add` | Link a shared doc to a project. Supports `inline` to embed content in context.md. |
 | `kb_ref_remove` | Unlink a shared doc from a project. |
-| `kb_global_add` | Mark a shared doc as globally available to all projects. |
+| `kb_global_add` | Mark a shared doc as globally available to all projects. Supports `inline`. |
 | `kb_global_remove` | Remove a shared doc from globals. |
 
 The `kb_draft` → `kb_write` workflow ensures agents preview changes before persisting them.
@@ -200,8 +201,10 @@ Agents can create shared docs, link them, and manage globals entirely through MC
 version: 1
 editor: hx                                    # Fallback: $EDITOR, then vi
 
-globals:                                       # Shared docs available to all projects
+globals:                                       # Shared docs available to all projects (referenced)
   - style-guide
+
+inline_globals:                                # Shared docs embedded into all projects' context.md
   - coding-standards
 
 projects:
@@ -218,6 +221,8 @@ Projects can be anywhere on disk — they don't need to be under a common direct
 refs:
   - rest-api-docs
   - design-patterns
+inline:                    # Embedded directly into context.md
+  - commit-conventions
 ```
 
 **`meta.yml`** — Optional shared doc metadata:
@@ -256,6 +261,13 @@ The repo's CLAUDE.md becomes a single `@import` pointer. Claude Code expands thi
 
 This directive ensures agents edit the KB file (versioned, centralized) rather than the repo's pointer file.
 
+## Ref vs Inline
+
+Shared docs can be linked in two modes:
+
+- **Ref** (default) — listed in a `<!-- KB:REFS -->` comment as a summary with line counts. Agents fetch content on-demand via `kb_read`/`kb_search`. Best for large reference docs.
+- **Inline** (`--inline`) — content embedded directly into `context.md` inside `<!-- KB:INLINE -->` blocks, loaded at session start. Best for small docs that should always be available (commit conventions, style guides).
+
 ## CLI Commands
 
 | Command | Description |
@@ -270,9 +282,9 @@ This directive ensures agents edit the KB file (versioned, centralized) rather t
 | `kb project show <NAME>` | Show project details and context |
 | `kb shared add <SLUG> <FILES...>` | Add shared documents to the KB |
 | `kb shared list` | List shared documents with usage info |
-| `kb ref add <PROJECT> <SLUG>` | Link a shared doc to a project |
+| `kb ref add <PROJECT> <SLUG> [--inline]` | Link a shared doc to a project |
 | `kb ref remove <PROJECT> <SLUG>` | Unlink a shared doc from a project |
-| `kb global add <SLUG>` | Make a shared doc available to all projects |
+| `kb global add <SLUG> [--inline]` | Make a shared doc available to all projects |
 | `kb global remove <SLUG>` | Remove a shared doc from globals |
 | `kb global list` | List global shared docs |
 | `kb search <QUERY> [--project NAME]` | Full-text search across the KB |
