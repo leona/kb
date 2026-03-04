@@ -4,6 +4,8 @@ A CLI tool and MCP server for managing markdown knowledge bases across projects.
 
 Supports [Claude Code](https://code.claude.com/docs/en/overview), [OpenAI Codex](https://github.com/openai/codex), and [OpenCode](https://opencode.ai/).
 
+![TUI Browser](assets/browse.gif)
+
 ## Why
 
 - **Context files are scattered** across repos with no way to share docs between projects
@@ -115,6 +117,22 @@ kb
 - Launched inside a registered project → jumps to that project's detail view
 - Navigate with arrow keys or `h`/`l`, `tab` to switch panes, `/` to filter, Enter to open, Esc to go back
 - `q` or `Ctrl+C` to quit
+
+### Agent Usage
+
+Agents use KB tools via MCP to search, read, and create docs on-demand.
+
+**Searching the knowledge base:**
+
+![Agent searching the KB](assets/search.webp)
+
+**Reading shared API docs:**
+
+![Agent reading API docs](assets/api-docs.webp)
+
+**Creating a new shared doc:**
+
+![Agent creating a shared doc](assets/add.webp)
 
 ## Versioning
 
