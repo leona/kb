@@ -127,6 +127,8 @@ type loadSharedFilesMsg struct {
 
 type refToggledMsg struct{ err error }
 
+type globalToggledMsg struct{ err error }
+
 type editorFinishedMsg struct{ err error }
 
 // --- Init ---
@@ -161,9 +163,26 @@ func (m model) loadShared() tea.Cmd {
 		if err != nil {
 			return loadSharedMsg{err: err}
 		}
+		cfg, _ := config.Load(m.kbRoot)
+		globalSet := make(map[string]bool)
+		inlineGlobalSet := make(map[string]bool)
+		if cfg != nil {
+			for _, s := range cfg.Globals {
+				globalSet[s] = true
+			}
+			for _, s := range cfg.InlineGlobals {
+				inlineGlobalSet[s] = true
+			}
+		}
 		items := make([]list.Item, len(docs))
 		for i, d := range docs {
-			items[i] = sharedItem{info: d}
+			mode := ""
+			if inlineGlobalSet[d.Slug] {
+				mode = "inline"
+			} else if globalSet[d.Slug] {
+				mode = "global"
+			}
+			items[i] = sharedItem{info: d, globalMode: mode}
 		}
 		return loadSharedMsg{items: items}
 	}
@@ -194,19 +213,55 @@ func (m model) loadProjectDetail(name string) tea.Cmd {
 			})
 		}
 
-		// Right pane: all shared docs with linked status
+		// Right pane: all shared docs with link mode
 		docs, _ := shared.List(m.kbRoot)
+		cfg, _ := config.Load(m.kbRoot)
 		refSet := make(map[string]bool)
 		for _, r := range info.Refs {
 			refSet[r] = true
 		}
-		var refItems []list.Item
-		for _, d := range docs {
-			refItems = append(refItems, sharedRefItem{
-				info:   d,
-				linked: refSet[d.Slug],
-			})
+		inlineSet := make(map[string]bool)
+		for _, r := range info.Inline {
+			inlineSet[r] = true
 		}
+		globalSet := make(map[string]bool)
+		inlineGlobalSet := make(map[string]bool)
+		if cfg != nil {
+			for _, s := range cfg.Globals {
+				globalSet[s] = true
+			}
+			for _, s := range cfg.InlineGlobals {
+				inlineGlobalSet[s] = true
+			}
+		}
+		var globalItems, otherItems []list.Item
+		for _, d := range docs {
+			gm := ""
+			if inlineGlobalSet[d.Slug] {
+				gm = "inline"
+			} else if globalSet[d.Slug] {
+				gm = "global"
+			}
+			lm := ""
+			if gm == "" {
+				if inlineSet[d.Slug] {
+					lm = "inline"
+				} else if refSet[d.Slug] {
+					lm = "ref"
+				}
+			}
+			item := sharedRefItem{
+				info:       d,
+				linkMode:   lm,
+				globalMode: gm,
+			}
+			if gm != "" {
+				globalItems = append(globalItems, item)
+			} else {
+				otherItems = append(otherItems, item)
+			}
+		}
+		refItems := append(globalItems, otherItems...)
 
 		return loadProjectDetailMsg{
 			projectName: name,
@@ -236,21 +291,55 @@ func (m model) loadSharedFiles(slug string) tea.Cmd {
 	}
 }
 
-func (m model) toggleRef(slug string, linked bool) tea.Cmd {
+func (m model) toggleRef(slug, linkMode string) tea.Cmd {
 	return func() tea.Msg {
 		var err error
-		action := "link"
-		if linked {
+		var action string
+		switch linkMode {
+		case "": // unlinked → ref
+			action = "link"
+			err = project.AddRef(m.kbRoot, m.projectName, slug, false)
+		case "ref": // ref → inline
+			action = "inline"
+			err = project.RemoveRef(m.kbRoot, m.projectName, slug)
+			if err == nil {
+				err = project.AddRef(m.kbRoot, m.projectName, slug, true)
+			}
+		case "inline": // inline → unlinked
 			action = "unlink"
 			err = project.RemoveRef(m.kbRoot, m.projectName, slug)
-		} else {
-			err = project.AddRef(m.kbRoot, m.projectName, slug, false)
 		}
 		if err != nil {
 			return refToggledMsg{err: err}
 		}
 		_ = git.AutoCommit(m.kbRoot, fmt.Sprintf("ref: %s %s → %s", action, m.projectName, slug))
 		return refToggledMsg{}
+	}
+}
+
+func (m model) toggleGlobal(slug, globalMode string) tea.Cmd {
+	return func() tea.Msg {
+		var err error
+		var action string
+		switch globalMode {
+		case "": // not global → global ref
+			action = "global"
+			err = project.AddGlobal(m.kbRoot, slug, false)
+		case "global": // global ref → global inline
+			action = "global-inline"
+			err = project.RemoveGlobal(m.kbRoot, slug)
+			if err == nil {
+				err = project.AddGlobal(m.kbRoot, slug, true)
+			}
+		case "inline": // global inline → not global
+			action = "unglobal"
+			err = project.RemoveGlobal(m.kbRoot, slug)
+		}
+		if err != nil {
+			return globalToggledMsg{err: err}
+		}
+		_ = git.AutoCommit(m.kbRoot, fmt.Sprintf("global: %s %s", action, slug))
+		return globalToggledMsg{}
 	}
 }
 
@@ -320,6 +409,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, m.loadProjectDetail(m.projectName)
+
+	case globalToggledMsg:
+		if msg.err != nil {
+			cmd := m.sharedList.NewStatusMessage(fmt.Sprintf("Error: %v", msg.err))
+			return m, cmd
+		}
+		return m, m.loadShared()
 
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -401,6 +497,13 @@ func (m model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.loadSharedFiles(item.info.Slug)
 				}
 			}
+		case " ":
+			if m.focus == paneRight {
+				item, ok := m.sharedList.SelectedItem().(sharedItem)
+				if ok {
+					return m, m.toggleGlobal(item.info.Slug, item.globalMode)
+				}
+			}
 		}
 	}
 
@@ -464,7 +567,15 @@ func (m model) updateProjectDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				item, ok := m.sharedRefList.SelectedItem().(sharedRefItem)
 				if ok {
-					return m, m.toggleRef(item.info.Slug, item.linked)
+					m.state = stateSharedFiles
+					return m, m.loadSharedFiles(item.info.Slug)
+				}
+			}
+		case " ":
+			if m.focus == paneRight {
+				item, ok := m.sharedRefList.SelectedItem().(sharedRefItem)
+				if ok && item.globalMode == "" {
+					return m, m.toggleRef(item.info.Slug, item.linkMode)
 				}
 			}
 		}
@@ -529,12 +640,12 @@ func (m model) View() string {
 	case stateMain:
 		return m.viewDualPane(
 			m.projectsList.View(), m.sharedList.View(),
-			"enter: open  ←→/hl: switch pane  /: filter  q: quit",
+			"enter: open  space: cycle global  ←→/hl: switch pane  /: filter  q: quit",
 		)
 	case stateProjectDetail:
 		return m.viewDualPane(
 			m.detailList.View(), m.sharedRefList.View(),
-			"enter: edit/toggle ref  ←→/hl: switch pane  /: filter  esc: back  q: quit",
+			"enter: edit  space: cycle ref↔inline  ←→/hl: switch pane  /: filter  esc: back  q: quit",
 		)
 	case stateSharedFiles:
 		return m.sharedFilesList.View() + "\n" +
