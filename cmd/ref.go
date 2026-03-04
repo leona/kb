@@ -24,6 +24,7 @@ var refAddCmd = &cobra.Command{
 		kbRoot := config.ResolveKBRoot()
 		projectName := args[0]
 		slug := args[1]
+		inline, _ := cmd.Flags().GetBool("inline")
 
 		if !project.Exists(kbRoot, projectName) {
 			return fmt.Errorf("project %q not found", projectName)
@@ -32,18 +33,22 @@ var refAddCmd = &cobra.Command{
 			return fmt.Errorf("shared doc %q not found", slug)
 		}
 
-		if err := project.AddRef(kbRoot, projectName, slug); errors.Is(err, project.ErrAlreadyLinked) {
+		if err := project.AddRef(kbRoot, projectName, slug, inline); errors.Is(err, project.ErrAlreadyLinked) {
 			fmt.Printf("%s already linked to %s\n", projectName, slug)
 			return nil
 		} else if err != nil {
 			return err
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s", projectName, slug)); err != nil {
+		linkType := "ref"
+		if inline {
+			linkType = "inline"
+		}
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
 			return err
 		}
 
-		fmt.Printf("Linked %s → %s\n", projectName, slug)
+		fmt.Printf("Linked %s → %s (%s)\n", projectName, slug, linkType)
 		return nil
 	},
 }
@@ -74,6 +79,7 @@ var refRemoveCmd = &cobra.Command{
 }
 
 func init() {
+	refAddCmd.Flags().Bool("inline", false, "Inline the shared doc content directly into context.md")
 	refCmd.AddCommand(refAddCmd)
 	refCmd.AddCommand(refRemoveCmd)
 	rootCmd.AddCommand(refCmd)

@@ -12,15 +12,17 @@ import (
 
 // Config represents the kb.yml configuration file.
 type Config struct {
-	Version  int               `yaml:"version"`
-	Editor   string            `yaml:"editor,omitempty"`
-	Globals  []string          `yaml:"globals,omitempty"`  // shared doc slugs available to all projects
-	Projects map[string]string `yaml:"projects,omitempty"` // name → absolute path
+	Version       int               `yaml:"version"`
+	Editor        string            `yaml:"editor,omitempty"`
+	Globals       []string          `yaml:"globals,omitempty"`        // shared doc slugs available to all projects
+	InlineGlobals []string          `yaml:"inline_globals,omitempty"` // shared doc slugs inlined into all projects' context.md
+	Projects      map[string]string `yaml:"projects,omitempty"`       // name → absolute path
 }
 
 // Refs represents a project's refs.yml file.
 type Refs struct {
-	Refs []string `yaml:"refs"`
+	Refs   []string `yaml:"refs"`
+	Inline []string `yaml:"inline,omitempty"` // shared doc slugs inlined into context.md
 }
 
 // Meta represents a shared doc's meta.yml file.
@@ -190,6 +192,44 @@ func EffectiveRefs(cfg *Config, projectRefs []string) []string {
 		}
 	}
 	return result
+}
+
+// EffectiveInline returns the merged list of a project's inline slugs and global
+// inline shared docs, deduplicated and with globals first.
+func EffectiveInline(cfg *Config, projectInline []string) []string {
+	seen := make(map[string]bool, len(cfg.InlineGlobals)+len(projectInline))
+	var result []string
+	for _, slug := range cfg.InlineGlobals {
+		if !seen[slug] {
+			seen[slug] = true
+			result = append(result, slug)
+		}
+	}
+	for _, slug := range projectInline {
+		if !seen[slug] {
+			seen[slug] = true
+			result = append(result, slug)
+		}
+	}
+	return result
+}
+
+// EffectiveRefsAndInline computes both effective lists and ensures mutual
+// exclusivity: any slug in the inline list is removed from the refs list.
+func EffectiveRefsAndInline(cfg *Config, projectRefs, projectInline []string) (refs, inline []string) {
+	inline = EffectiveInline(cfg, projectInline)
+	allRefs := EffectiveRefs(cfg, projectRefs)
+
+	inlineSet := make(map[string]bool, len(inline))
+	for _, slug := range inline {
+		inlineSet[slug] = true
+	}
+	for _, slug := range allRefs {
+		if !inlineSet[slug] {
+			refs = append(refs, slug)
+		}
+	}
+	return refs, inline
 }
 
 // GetEditor returns the configured editor, falling back to $EDITOR, then "vi".

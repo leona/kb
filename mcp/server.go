@@ -78,6 +78,7 @@ func Serve() error {
 		mcp.WithDescription("Link a shared doc to a project so it appears in kb_list. Idempotent — safe to call if already linked. Auto-detects project from working directory if not specified. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("project", mcp.Description("Project name. Auto-detected from cwd if omitted.")),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to link (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("inline", mcp.Description("If true, inline the shared doc content directly into context.md instead of listing it as a reference.")),
 		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleRefAdd)
 
@@ -108,6 +109,7 @@ func Serve() error {
 	s.AddTool(mcp.NewTool("kb_global_add",
 		mcp.WithDescription("Mark a shared doc as globally available to all projects. It will appear in kb_list and kb_search for every project without needing kb_ref_add. Idempotent. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to make global (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("inline", mcp.Description("If true, inline the shared doc content directly into all projects' context.md instead of listing as a reference.")),
 		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleGlobalAdd)
 
@@ -252,15 +254,16 @@ func handleList(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		if includeShared {
 			cfg, _ := config.Load(kbRoot)
 			effectiveRefs := info.Refs
+			var effectiveInline []string
 			if cfg != nil {
-				effectiveRefs = config.EffectiveRefs(cfg, info.Refs)
+				effectiveRefs, effectiveInline = config.EffectiveRefsAndInline(cfg, info.Refs, info.Inline)
 			}
 
-			refsSet := make(map[string]bool, len(effectiveRefs))
-			if len(effectiveRefs) > 0 {
+			linkedSet := make(map[string]bool, len(effectiveRefs)+len(effectiveInline))
+			if len(effectiveRefs) > 0 || len(effectiveInline) > 0 {
 				sb.WriteString("\n## Linked Shared Docs\n\n")
 				for _, slug := range effectiveRefs {
-					refsSet[slug] = true
+					linkedSet[slug] = true
 					sharedInfo, err := shared.Get(kbRoot, slug)
 					if err != nil {
 						continue
@@ -276,6 +279,18 @@ func handleList(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 						sb.WriteString(fmt.Sprintf("  - shared/%s/%s (%d lines)\n", slug, f, lines))
 					}
 				}
+				for _, slug := range effectiveInline {
+					linkedSet[slug] = true
+					sharedInfo, err := shared.Get(kbRoot, slug)
+					if err != nil {
+						continue
+					}
+					sb.WriteString(fmt.Sprintf("- %s (%d lines, inlined in context)", sharedInfo.DisplayTitle(), sharedInfo.TotalLines))
+					if sharedInfo.Description != "" {
+						sb.WriteString(fmt.Sprintf(" — %s", sharedInfo.Description))
+					}
+					sb.WriteString("\n")
+				}
 			}
 
 			// Show all other shared docs so they're discoverable
@@ -283,7 +298,7 @@ func handleList(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 			if err == nil {
 				var other []shared.Info
 				for _, d := range allShared {
-					if !refsSet[d.Slug] {
+					if !linkedSet[d.Slug] {
 						other = append(other, d)
 					}
 				}
@@ -583,6 +598,7 @@ func handleWrite(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 func handleGlobalAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	kbRoot := config.ResolveKBRoot()
 	slug := request.GetString("shared", "")
+	inline := request.GetBool("inline", false)
 
 	if slug == "" {
 		return mcp.NewToolResultError("'shared' parameter is required"), nil
@@ -594,19 +610,23 @@ func handleGlobalAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		return mcp.NewToolResultError(fmt.Sprintf("Shared doc %q not found. Create it first with kb_write.", slug)), nil
 	}
 
-	if err := project.AddGlobal(kbRoot, slug); errors.Is(err, project.ErrAlreadyGlobal) {
+	if err := project.AddGlobal(kbRoot, slug, inline); errors.Is(err, project.ErrAlreadyGlobal) {
 		return mcp.NewToolResultText(fmt.Sprintf("%s is already global", slug)), nil
 	} else if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
+	linkType := "ref"
+	if inline {
+		linkType = "inline"
+	}
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s", slug)); err != nil {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Marked %s as global — now available to all projects", slug)), nil
+	return mcp.NewToolResultText(fmt.Sprintf("Marked %s as global (%s) — now available to all projects", slug, linkType)), nil
 }
 
 func handleGlobalRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -713,6 +733,7 @@ func handleRefAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 	kbRoot := config.ResolveKBRoot()
 	projectName := resolveProject(request.GetString("project", ""))
 	slug := request.GetString("shared", "")
+	inline := request.GetBool("inline", false)
 
 	if projectName == "" {
 		return mcp.NewToolResultError("Could not detect project. Specify 'project' parameter or ensure cwd is inside a registered project."), nil
@@ -730,19 +751,23 @@ func handleRefAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		return mcp.NewToolResultError(fmt.Sprintf("Shared doc %q not found", slug)), nil
 	}
 
-	if err := project.AddRef(kbRoot, projectName, slug); errors.Is(err, project.ErrAlreadyLinked) {
+	if err := project.AddRef(kbRoot, projectName, slug, inline); errors.Is(err, project.ErrAlreadyLinked) {
 		return mcp.NewToolResultText(fmt.Sprintf("%s is already linked to %s", slug, projectName)), nil
 	} else if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
+	linkType := "ref"
+	if inline {
+		linkType = "inline"
+	}
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s", projectName, slug)); err != nil {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
 
-	return mcp.NewToolResultText(fmt.Sprintf("Linked %s → %s", projectName, slug)), nil
+	return mcp.NewToolResultText(fmt.Sprintf("Linked %s → %s (%s)", projectName, slug, linkType)), nil
 }
 
 func handleRefRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

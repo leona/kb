@@ -27,6 +27,7 @@ type Info struct {
 	HasContext   bool
 	ContextLines int
 	Refs         []string
+	Inline       []string // shared doc slugs inlined into context.md
 	Files        []string // additional markdown files
 }
 
@@ -70,6 +71,7 @@ func Get(kbRoot, name string) (Info, error) {
 	refs, err := config.LoadRefs(dir)
 	if err == nil {
 		info.Refs = refs.Refs
+		info.Inline = refs.Inline
 	}
 
 	mdFiles, err := fs.ListMarkdownFiles(dir)
@@ -195,46 +197,50 @@ func Detect(kbRoot string) (string, error) {
 }
 
 // AddRef links a shared doc to a project's refs.yml and regenerates the
-// KB:REFS inventory. Returns ErrAlreadyLinked if already linked.
-func AddRef(kbRoot, projectName, slug string) error {
+// KB:REFS inventory. If inline is true, the doc is added to the inline list
+// (embedded in context.md) instead of the refs list. Adding as one type
+// removes from the other. Returns ErrAlreadyLinked if already in the target list.
+func AddRef(kbRoot, projectName, slug string, inline bool) error {
 	dir := Dir(kbRoot, projectName)
 	refs, err := config.LoadRefs(dir)
 	if err != nil {
 		return err
 	}
-	for _, r := range refs.Refs {
-		if r == slug {
+	if inline {
+		if containsSlug(refs.Inline, slug) {
 			return ErrAlreadyLinked
 		}
+		refs.Inline = append(refs.Inline, slug)
+		refs.Refs = removeSlug(refs.Refs, slug)
+	} else {
+		if containsSlug(refs.Refs, slug) {
+			return ErrAlreadyLinked
+		}
+		refs.Refs = append(refs.Refs, slug)
+		refs.Inline = removeSlug(refs.Inline, slug)
 	}
-	refs.Refs = append(refs.Refs, slug)
 	if err := config.SaveRefs(dir, refs); err != nil {
 		return err
 	}
 	return UpdateRefsInventory(kbRoot, projectName)
 }
 
-// RemoveRef unlinks a shared doc from a project's refs.yml and regenerates the
-// KB:REFS inventory. Returns ErrNotLinked if not linked.
+// RemoveRef unlinks a shared doc from a project's refs.yml (from either refs
+// or inline list) and regenerates the inventory. Returns ErrNotLinked if not
+// found in either list.
 func RemoveRef(kbRoot, projectName, slug string) error {
 	dir := Dir(kbRoot, projectName)
 	refs, err := config.LoadRefs(dir)
 	if err != nil {
 		return err
 	}
-	found := false
-	var newRefs []string
-	for _, r := range refs.Refs {
-		if r == slug {
-			found = true
-		} else {
-			newRefs = append(newRefs, r)
-		}
-	}
-	if !found {
+	newRefs := removeSlug(refs.Refs, slug)
+	newInline := removeSlug(refs.Inline, slug)
+	if len(newRefs) == len(refs.Refs) && len(newInline) == len(refs.Inline) {
 		return ErrNotLinked
 	}
 	refs.Refs = newRefs
+	refs.Inline = newInline
 	if err := config.SaveRefs(dir, refs); err != nil {
 		return err
 	}
@@ -242,70 +248,69 @@ func RemoveRef(kbRoot, projectName, slug string) error {
 }
 
 // AddGlobal marks a shared doc as globally available to all projects and
-// regenerates all KB:REFS inventories. Returns ErrAlreadyGlobal if already global.
-func AddGlobal(kbRoot, slug string) error {
+// regenerates all inventories. If inline is true, adds to inline_globals
+// (embedded in context.md) instead of globals. Returns ErrAlreadyGlobal if
+// already in the target list.
+func AddGlobal(kbRoot, slug string, inline bool) error {
 	cfg, err := config.Load(kbRoot)
 	if err != nil {
 		return err
 	}
-	for _, g := range cfg.Globals {
-		if g == slug {
+	if inline {
+		if containsSlug(cfg.InlineGlobals, slug) {
 			return ErrAlreadyGlobal
 		}
+		cfg.InlineGlobals = append(cfg.InlineGlobals, slug)
+		cfg.Globals = removeSlug(cfg.Globals, slug)
+	} else {
+		if containsSlug(cfg.Globals, slug) {
+			return ErrAlreadyGlobal
+		}
+		cfg.Globals = append(cfg.Globals, slug)
+		cfg.InlineGlobals = removeSlug(cfg.InlineGlobals, slug)
 	}
-	cfg.Globals = append(cfg.Globals, slug)
 	if err := config.Save(kbRoot, cfg); err != nil {
 		return err
 	}
 	return UpdateAllRefsInventories(kbRoot)
 }
 
-// RemoveGlobal removes a shared doc from globals and regenerates all KB:REFS
-// inventories. Returns ErrNotGlobal if not global.
+// RemoveGlobal removes a shared doc from globals (both globals and
+// inline_globals) and regenerates all inventories. Returns ErrNotGlobal if
+// not found in either list.
 func RemoveGlobal(kbRoot, slug string) error {
 	cfg, err := config.Load(kbRoot)
 	if err != nil {
 		return err
 	}
-	found := false
-	var newGlobals []string
-	for _, g := range cfg.Globals {
-		if g == slug {
-			found = true
-		} else {
-			newGlobals = append(newGlobals, g)
-		}
-	}
-	if !found {
+	newGlobals := removeSlug(cfg.Globals, slug)
+	newInlineGlobals := removeSlug(cfg.InlineGlobals, slug)
+	if len(newGlobals) == len(cfg.Globals) && len(newInlineGlobals) == len(cfg.InlineGlobals) {
 		return ErrNotGlobal
 	}
 	cfg.Globals = newGlobals
+	cfg.InlineGlobals = newInlineGlobals
 	if err := config.Save(kbRoot, cfg); err != nil {
 		return err
 	}
 	return UpdateAllRefsInventories(kbRoot)
 }
 
-// RemoveGlobalEntry removes a slug from the globals list in kb.yml without
-// regenerating inventories. Use this when you'll call UpdateAllRefsInventories
-// separately (e.g., during shared doc deletion).
+// RemoveGlobalEntry removes a slug from both globals and inline_globals in
+// kb.yml without regenerating inventories. Use this when you'll call
+// UpdateAllRefsInventories separately (e.g., during shared doc deletion).
 func RemoveGlobalEntry(kbRoot, slug string) error {
 	cfg, err := config.Load(kbRoot)
 	if err != nil {
 		return err
 	}
-	var newGlobals []string
-	for _, g := range cfg.Globals {
-		if g != slug {
-			newGlobals = append(newGlobals, g)
-		}
-	}
-	cfg.Globals = newGlobals
+	cfg.Globals = removeSlug(cfg.Globals, slug)
+	cfg.InlineGlobals = removeSlug(cfg.InlineGlobals, slug)
 	return config.Save(kbRoot, cfg)
 }
 
-// RemoveRefFromAll removes a slug from every project's refs.yml.
-// Used when deleting a shared doc entirely.
+// RemoveRefFromAll removes a slug from every project's refs.yml (both refs
+// and inline lists). Used when deleting a shared doc entirely.
 func RemoveRefFromAll(kbRoot, slug string) error {
 	projectsDir := filepath.Join(kbRoot, "projects")
 	entries, err := os.ReadDir(projectsDir)
@@ -324,29 +329,43 @@ func RemoveRefFromAll(kbRoot, slug string) error {
 		if err != nil {
 			continue
 		}
-		var newRefs []string
-		changed := false
-		for _, r := range refs.Refs {
-			if r == slug {
-				changed = true
-			} else {
-				newRefs = append(newRefs, r)
-			}
-		}
-		if changed {
+		newRefs := removeSlug(refs.Refs, slug)
+		newInline := removeSlug(refs.Inline, slug)
+		if len(newRefs) != len(refs.Refs) || len(newInline) != len(refs.Inline) {
 			refs.Refs = newRefs
+			refs.Inline = newInline
 			_ = config.SaveRefs(projDir, refs)
 		}
 	}
 	return nil
 }
 
+func containsSlug(slugs []string, slug string) bool {
+	for _, s := range slugs {
+		if s == slug {
+			return true
+		}
+	}
+	return false
+}
+
+func removeSlug(slugs []string, slug string) []string {
+	var result []string
+	for _, s := range slugs {
+		if s != slug {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 const refsCommentStart = "<!-- KB:REFS"
 const refsCommentEnd = "-->"
+const inlineCommentStart = "<!-- KB:INLINE "
+const inlineCommentEnd = "<!-- /KB:INLINE "
 
-// UpdateRefsInventory regenerates the <!-- KB:REFS ... --> comment block in
-// a project's context.md. This ensures the @import-expanded content includes
-// an inventory of linked shared docs visible to agents at session start.
+// UpdateRefsInventory regenerates the <!-- KB:REFS ... --> comment block and
+// <!-- KB:INLINE ... --> blocks in a project's context.md.
 func UpdateRefsInventory(kbRoot, name string) error {
 	contextPath := ContextPath(kbRoot, name)
 	if !fs.FileExists(contextPath) {
@@ -358,48 +377,114 @@ func UpdateRefsInventory(kbRoot, name string) error {
 		return err
 	}
 
-	// Strip existing KB:REFS block.
+	// Strip existing generated blocks.
 	content = stripRefsComment(content)
+	content = stripInlineBlocks(content)
 
-	// Build effective refs list.
-	info, err := Get(kbRoot, name)
+	// Load project refs and config.
+	dir := Dir(kbRoot, name)
+	refs, err := config.LoadRefs(dir)
 	if err != nil {
 		return err
 	}
 	cfg, _ := config.Load(kbRoot)
+
 	var effectiveRefs []string
+	var effectiveInline []string
 	if cfg != nil {
-		effectiveRefs = config.EffectiveRefs(cfg, info.Refs)
+		effectiveRefs, effectiveInline = config.EffectiveRefsAndInline(cfg, refs.Refs, refs.Inline)
 	} else {
-		effectiveRefs = info.Refs
+		effectiveRefs = refs.Refs
+		effectiveInline = refs.Inline
 	}
 
-	// Generate the new refs comment block.
+	var insertBlock strings.Builder
+
+	// Generate KB:REFS block for non-inline refs.
 	if len(effectiveRefs) > 0 {
-		var sb strings.Builder
-		sb.WriteString(refsCommentStart + "\n")
+		insertBlock.WriteString(refsCommentStart + "\n")
 		for _, slug := range effectiveRefs {
 			sharedInfo, err := shared.Get(kbRoot, slug)
 			if err != nil {
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("  - %s (%d lines)", sharedInfo.DisplayTitle(), sharedInfo.TotalLines))
+			insertBlock.WriteString(fmt.Sprintf("  - %s (%d lines)", sharedInfo.DisplayTitle(), sharedInfo.TotalLines))
 			if sharedInfo.Description != "" {
-				sb.WriteString(fmt.Sprintf(" — %s", sharedInfo.Description))
+				insertBlock.WriteString(fmt.Sprintf(" — %s", sharedInfo.Description))
 			}
-			sb.WriteString("\n")
+			insertBlock.WriteString("\n")
 			for _, f := range sharedInfo.Files {
-				sb.WriteString(fmt.Sprintf("    kb_read: shared/%s/%s\n", slug, f))
+				insertBlock.WriteString(fmt.Sprintf("    kb_read: shared/%s/%s\n", slug, f))
 			}
 		}
-		sb.WriteString("  Use kb_search or kb_read to access these docs.\n")
-		sb.WriteString(refsCommentEnd + "\n")
+		insertBlock.WriteString("  Use kb_search or kb_read to access these docs.\n")
+		insertBlock.WriteString(refsCommentEnd + "\n")
+	}
 
-		// Insert after the directive header comments, before the first content.
-		content = insertAfterHeader(content, sb.String())
+	// Generate KB:INLINE blocks.
+	for _, slug := range effectiveInline {
+		sharedDir := shared.Dir(kbRoot, slug)
+		mdFiles, err := fs.ListMarkdownFiles(sharedDir)
+		if err != nil || len(mdFiles) == 0 {
+			continue
+		}
+		insertBlock.WriteString(fmt.Sprintf("%s%s -->\n", inlineCommentStart, slug))
+		for i, f := range mdFiles {
+			fileContent, err := fs.ReadFile(filepath.Join(sharedDir, f))
+			if err != nil {
+				continue
+			}
+			insertBlock.WriteString(strings.TrimRight(fileContent, "\n"))
+			insertBlock.WriteString("\n")
+			if i < len(mdFiles)-1 {
+				insertBlock.WriteString("\n")
+			}
+		}
+		insertBlock.WriteString(fmt.Sprintf("%s%s -->\n", inlineCommentEnd, slug))
+	}
+
+	if insertBlock.Len() > 0 {
+		content = insertAfterHeader(content, insertBlock.String())
 	}
 
 	return os.WriteFile(contextPath, []byte(content), 0644)
+}
+
+// stripInlineBlocks removes all <!-- KB:INLINE slug -->...<!-- /KB:INLINE slug --> blocks.
+func stripInlineBlocks(content string) string {
+	for {
+		startIdx := strings.Index(content, inlineCommentStart)
+		if startIdx == -1 {
+			break
+		}
+		// Find the end of the opening tag line (<!-- KB:INLINE slug -->).
+		lineEnd := strings.Index(content[startIdx:], "\n")
+		if lineEnd == -1 {
+			// Malformed — strip to end.
+			content = content[:startIdx]
+			break
+		}
+		// Extract slug from opening tag.
+		tagContent := content[startIdx+len(inlineCommentStart) : startIdx+lineEnd]
+		tagContent = strings.TrimSuffix(strings.TrimSpace(tagContent), "-->")
+		slug := strings.TrimSpace(tagContent)
+
+		// Find the matching closing tag.
+		closeTag := fmt.Sprintf("%s%s -->", inlineCommentEnd, slug)
+		closeIdx := strings.Index(content[startIdx:], closeTag)
+		if closeIdx == -1 {
+			// Malformed — strip from start marker to end of file.
+			content = content[:startIdx]
+			break
+		}
+		endPos := startIdx + closeIdx + len(closeTag)
+		// Also strip trailing newline.
+		if endPos < len(content) && content[endPos] == '\n' {
+			endPos++
+		}
+		content = content[:startIdx] + content[endPos:]
+	}
+	return content
 }
 
 // UpdateAllRefsInventories regenerates the refs inventory for every project.

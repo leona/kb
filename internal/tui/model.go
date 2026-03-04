@@ -244,7 +244,7 @@ func (m model) toggleRef(slug string, linked bool) tea.Cmd {
 			action = "unlink"
 			err = project.RemoveRef(m.kbRoot, m.projectName, slug)
 		} else {
-			err = project.AddRef(m.kbRoot, m.projectName, slug)
+			err = project.AddRef(m.kbRoot, m.projectName, slug, false)
 		}
 		if err != nil {
 			return refToggledMsg{err: err}

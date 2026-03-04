@@ -96,8 +96,8 @@ func Dir(kbRoot, slug string) string {
 	return filepath.Join(kbRoot, "shared", slug)
 }
 
-// FindUsedBy scans all projects' refs.yml and globals to find which projects
-// effectively reference this slug (via explicit ref or global).
+// FindUsedBy scans all projects' refs.yml and globals (including inline
+// variants) to find which projects effectively reference this slug.
 func FindUsedBy(kbRoot, slug string) []string {
 	cfg, _ := config.Load(kbRoot)
 	isGlobal := false
@@ -106,6 +106,14 @@ func FindUsedBy(kbRoot, slug string) []string {
 			if g == slug {
 				isGlobal = true
 				break
+			}
+		}
+		if !isGlobal {
+			for _, g := range cfg.InlineGlobals {
+				if g == slug {
+					isGlobal = true
+					break
+				}
 			}
 		}
 	}
@@ -129,11 +137,23 @@ func FindUsedBy(kbRoot, slug string) []string {
 		if err != nil {
 			continue
 		}
+		found := false
 		for _, ref := range refs.Refs {
 			if ref == slug {
-				users = append(users, e.Name())
+				found = true
 				break
 			}
+		}
+		if !found {
+			for _, ref := range refs.Inline {
+				if ref == slug {
+					found = true
+					break
+				}
+			}
+		}
+		if found {
+			users = append(users, e.Name())
 		}
 	}
 	return users

@@ -24,23 +24,28 @@ var globalAddCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kbRoot := config.ResolveKBRoot()
 		slug := args[0]
+		inline, _ := cmd.Flags().GetBool("inline")
 
 		if !shared.Exists(kbRoot, slug) {
 			return fmt.Errorf("shared doc %q not found", slug)
 		}
 
-		if err := project.AddGlobal(kbRoot, slug); errors.Is(err, project.ErrAlreadyGlobal) {
+		if err := project.AddGlobal(kbRoot, slug, inline); errors.Is(err, project.ErrAlreadyGlobal) {
 			fmt.Printf("%s is already global\n", slug)
 			return nil
 		} else if err != nil {
 			return err
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s", slug)); err != nil {
+		linkType := "ref"
+		if inline {
+			linkType = "inline"
+		}
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
 			return err
 		}
 
-		fmt.Printf("Added %s as a global shared doc\n", slug)
+		fmt.Printf("Added %s as a global shared doc (%s)\n", slug, linkType)
 		return nil
 	},
 }
@@ -80,7 +85,7 @@ var globalListCmd = &cobra.Command{
 			return err
 		}
 
-		if len(cfg.Globals) == 0 {
+		if len(cfg.Globals) == 0 && len(cfg.InlineGlobals) == 0 {
 			fmt.Println("No global shared docs configured.")
 			fmt.Println("Use 'kb global add <slug>' to make a shared doc available to all projects.")
 			return nil
@@ -96,11 +101,21 @@ var globalListCmd = &cobra.Command{
 			fmt.Printf("  %-25s %4d lines  %d files  used by: %s\n",
 				info.DisplayTitle(), info.TotalLines, len(info.Files), strings.Join(info.UsedBy, ", "))
 		}
+		for _, slug := range cfg.InlineGlobals {
+			info, err := shared.Get(kbRoot, slug)
+			if err != nil {
+				fmt.Printf("  %s (inline, not found)\n", slug)
+				continue
+			}
+			fmt.Printf("  %-25s %4d lines  %d files  (inline)  used by: %s\n",
+				info.DisplayTitle(), info.TotalLines, len(info.Files), strings.Join(info.UsedBy, ", "))
+		}
 		return nil
 	},
 }
 
 func init() {
+	globalAddCmd.Flags().Bool("inline", false, "Inline the shared doc content directly into all projects' context.md")
 	globalCmd.AddCommand(globalAddCmd)
 	globalCmd.AddCommand(globalRemoveCmd)
 	globalCmd.AddCommand(globalListCmd)
