@@ -195,6 +195,14 @@ func Show(kbRoot, ref, filePath string) (string, error) {
 
 // Revert restores a file to a previous version and auto-commits.
 func Revert(kbRoot, ref, filePath string) error {
+	if err := RevertFile(kbRoot, ref, filePath); err != nil {
+		return err
+	}
+	return AutoCommit(kbRoot, fmt.Sprintf("revert: %s to %s", filePath, ref))
+}
+
+// RevertFile restores a file to a previous version without committing.
+func RevertFile(kbRoot, ref, filePath string) error {
 	content, err := Show(kbRoot, ref, filePath)
 	if err != nil {
 		return err
@@ -205,5 +213,23 @@ func Revert(kbRoot, ref, filePath string) error {
 		return fmt.Errorf("writing file: %w", err)
 	}
 
-	return AutoCommit(kbRoot, fmt.Sprintf("revert: %s to %s", filePath, ref))
+	return nil
+}
+
+// GenerateCommitMessage creates a descriptive commit message based on pending changes.
+func GenerateCommitMessage(kbRoot string) string {
+	diff, err := Diff(kbRoot, "")
+	if err != nil || diff == "No uncommitted changes." {
+		return "auto: update"
+	}
+
+	lines := strings.Split(diff, "\n")
+	if len(lines) == 1 {
+		parts := strings.SplitN(lines[0], " ", 2)
+		if len(parts) == 2 {
+			return fmt.Sprintf("auto: update %s", parts[1])
+		}
+	}
+
+	return fmt.Sprintf("auto: update %d files", len(lines))
 }

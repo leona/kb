@@ -35,7 +35,7 @@ Without --hook, commits all pending changes. Used by OpenCode's file_edited hook
 }
 
 func runManualCommit(kbRoot string) error {
-	msg := generateCommitMessage(kbRoot)
+	msg := git.GenerateCommitMessage(kbRoot)
 	if err := git.AutoCommit(kbRoot, msg); err != nil {
 		return fmt.Errorf("commit failed: %w", err)
 	}
@@ -84,25 +84,6 @@ func runHookCommit(kbRoot string) error {
 	msg := fmt.Sprintf("auto: update %s", relPath)
 
 	return git.AutoCommit(kbRoot, msg)
-}
-
-func generateCommitMessage(kbRoot string) string {
-	// Check what changed and generate a descriptive message
-	diff, err := git.Diff(kbRoot, "")
-	if err != nil || diff == "No uncommitted changes." {
-		return "auto: update"
-	}
-
-	lines := strings.Split(diff, "\n")
-	if len(lines) == 1 {
-		// Single file changed — use its path
-		parts := strings.SplitN(lines[0], " ", 2)
-		if len(parts) == 2 {
-			return fmt.Sprintf("auto: update %s", parts[1])
-		}
-	}
-
-	return fmt.Sprintf("auto: update %d files", len(lines))
 }
 
 func init() {

@@ -68,21 +68,24 @@ func Serve() error {
 	), handleShow)
 
 	s.AddTool(mcp.NewTool("kb_revert",
-		mcp.WithDescription("Revert a file to its content at a specific commit. The change is auto-committed."),
+		mcp.WithDescription("Revert a file to its content at a specific commit. The change is auto-committed unless no_commit is true."),
 		mcp.WithString("ref", mcp.Required(), mcp.Description("Commit hash (short or full) from kb_log.")),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Relative path within KB (e.g., 'projects/myapp/context.md').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleRevert)
 
 	s.AddTool(mcp.NewTool("kb_ref_add",
-		mcp.WithDescription("Link a shared doc to a project so it appears in kb_list. Idempotent — safe to call if already linked. Auto-detects project from working directory if not specified."),
+		mcp.WithDescription("Link a shared doc to a project so it appears in kb_list. Idempotent — safe to call if already linked. Auto-detects project from working directory if not specified. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("project", mcp.Description("Project name. Auto-detected from cwd if omitted.")),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to link (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleRefAdd)
 
 	s.AddTool(mcp.NewTool("kb_ref_remove",
-		mcp.WithDescription("Unlink a shared doc from a project. Auto-detects project from working directory if not specified."),
+		mcp.WithDescription("Unlink a shared doc from a project. Auto-detects project from working directory if not specified. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("project", mcp.Description("Project name. Auto-detected from cwd if omitted.")),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to unlink (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleRefRemove)
 
 	s.AddTool(mcp.NewTool("kb_draft",
@@ -94,27 +97,31 @@ func Serve() error {
 	), handleDraft)
 
 	s.AddTool(mcp.NewTool("kb_write",
-		mcp.WithDescription("Create or update a file in the knowledge base. IMPORTANT: Always use kb_draft first to show the user a preview before calling this tool. Path must be under shared/ or projects/. Parent directories are created automatically. Changes are auto-committed."),
+		mcp.WithDescription("Create or update a file in the knowledge base. IMPORTANT: Always use kb_draft first to show the user a preview before calling this tool. Path must be under shared/ or projects/. Parent directories are created automatically. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Relative path within KB (e.g., 'shared/my-shared-doc/api-docs.md' or 'projects/myapp/context.md').")),
 		mcp.WithString("content", mcp.Required(), mcp.Description("The markdown content to write.")),
 		mcp.WithString("title", mcp.Description("Title for shared doc meta.yml. Creates or updates the title.")),
 		mcp.WithString("description", mcp.Description("Description for shared doc meta.yml (1-2 sentence summary). Helps agents discover relevant docs.")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleWrite)
 
 	s.AddTool(mcp.NewTool("kb_global_add",
-		mcp.WithDescription("Mark a shared doc as globally available to all projects. It will appear in kb_list and kb_search for every project without needing kb_ref_add. Idempotent."),
+		mcp.WithDescription("Mark a shared doc as globally available to all projects. It will appear in kb_list and kb_search for every project without needing kb_ref_add. Idempotent. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to make global (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleGlobalAdd)
 
 	s.AddTool(mcp.NewTool("kb_global_remove",
-		mcp.WithDescription("Remove a shared doc from globals. It will no longer be automatically available to all projects (projects with explicit refs will keep it)."),
+		mcp.WithDescription("Remove a shared doc from globals. It will no longer be automatically available to all projects (projects with explicit refs will keep it). Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("shared", mcp.Required(), mcp.Description("Shared doc slug to remove from globals (e.g., 'my-shared-doc').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleGlobalRemove)
 
 	s.AddTool(mcp.NewTool("kb_delete",
-		mcp.WithDescription("Delete a shared doc or a specific file from the knowledge base. When deleting a shared doc slug, removes the entire directory, all refs to it, and any global entry. When deleting a specific file path, removes just that file. Changes are auto-committed."),
+		mcp.WithDescription("Delete a shared doc or a specific file from the knowledge base. When deleting a shared doc slug, removes the entire directory, all refs to it, and any global entry. When deleting a specific file path, removes just that file. Changes are auto-committed unless no_commit is true."),
 		mcp.WithString("shared", mcp.Description("Shared doc slug to delete entirely (e.g., 'my-shared-doc'). Removes directory, refs, and global entry.")),
 		mcp.WithString("path", mcp.Description("Relative path of a specific file to delete (e.g., 'shared/my-shared-doc/old-notes.md').")),
+		mcp.WithBoolean("no_commit", mcp.Description("Skip auto-commit. Use kb_commit to commit later.")),
 	), handleDelete)
 
 	s.AddTool(mcp.NewTool("kb_search",
@@ -125,6 +132,11 @@ func Serve() error {
 		mcp.WithNumber("max_results", mcp.Description("Maximum results to return. Default: 20.")),
 		mcp.WithNumber("context", mcp.Description("Number of lines to show before and after each match. Default: 2.")),
 	), handleSearch)
+
+	s.AddTool(mcp.NewTool("kb_commit",
+		mcp.WithDescription("Commit pending knowledge base changes. Use after mutations made with no_commit=true. If no message is provided, one is auto-generated from the pending changes."),
+		mcp.WithString("message", mcp.Description("Optional commit message. Auto-generates a descriptive message if omitted.")),
+	), handleCommit)
 
 	return server.ServeStdio(s)
 }
@@ -559,8 +571,10 @@ func handleWrite(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 	}
 
 	lines, _ := iofs.CountLines(absPath)
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("write: %s (%d lines)", cleanPath, lines)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("write: %s (%d lines)", cleanPath, lines)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Wrote %s (%d lines)", cleanPath, lines)), nil
@@ -586,8 +600,10 @@ func handleGlobalAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s", slug)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s", slug)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Marked %s as global — now available to all projects", slug)), nil
@@ -610,8 +626,10 @@ func handleGlobalRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Removed %s from globals", slug)), nil
@@ -651,8 +669,10 @@ func handleDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 			fmt.Fprintf(os.Stderr, "warning: failed to update refs inventories: %v\n", err)
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: shared/%s", slug)); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		if !request.GetBool("no_commit", false) {
+			if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: shared/%s", slug)); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+			}
 		}
 
 		return mcp.NewToolResultText(fmt.Sprintf("Deleted shared doc %s (directory, refs, and global entry removed)", slug)), nil
@@ -680,8 +700,10 @@ func handleDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		}
 	}
 
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: %s", cleanPath)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: %s", cleanPath)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Deleted %s", cleanPath)), nil
@@ -714,8 +736,10 @@ func handleRefAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s", projectName, slug)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s", projectName, slug)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Linked %s → %s", projectName, slug)), nil
@@ -742,8 +766,10 @@ func handleRefRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 	}
 
-	if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Unlinked %s → %s", projectName, slug)), nil
@@ -835,9 +861,48 @@ func handleRevert(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	if err := git.Revert(kbRoot, ref, cleanPath); err != nil {
+	if err := git.RevertFile(kbRoot, ref, cleanPath); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Revert error: %v", err)), nil
 	}
 
+	if !request.GetBool("no_commit", false) {
+		if err := git.AutoCommit(kbRoot, fmt.Sprintf("revert: %s to %s", cleanPath, ref)); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+		}
+	}
+
 	return mcp.NewToolResultText(fmt.Sprintf("Reverted %s to %s", cleanPath, ref)), nil
+}
+
+func handleCommit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	kbRoot := config.ResolveKBRoot()
+
+	diff, err := git.Diff(kbRoot, "")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Error checking changes: %v", err)), nil
+	}
+	if diff == "No uncommitted changes." {
+		return mcp.NewToolResultText("No uncommitted changes to commit."), nil
+	}
+
+	message := request.GetString("message", "")
+	if message == "" {
+		lines := strings.Split(diff, "\n")
+		if len(lines) == 1 {
+			parts := strings.SplitN(lines[0], " ", 2)
+			if len(parts) == 2 {
+				message = fmt.Sprintf("auto: update %s", parts[1])
+			} else {
+				message = "auto: update"
+			}
+		} else {
+			message = fmt.Sprintf("auto: update %d files", len(lines))
+		}
+	}
+
+	if err := git.AutoCommit(kbRoot, message); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Committed: %s", message)), nil
 }
