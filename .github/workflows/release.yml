@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version tag
+        id: tag
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.tag.outputs.tag }}" -m "Release ${{ steps.tag.outputs.tag }}"
+          git push origin "${{ steps.tag.outputs.tag }}"
+
+  build:
+    needs: release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -ldflags "-s -w \
+            -X main.Version=${{ needs.release.outputs.tag }} \
+            -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') \
+            -X main.GitCommit=$(git rev-parse --short HEAD)" \
+            -o kb-${{ matrix.suffix }} .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kb-${{ matrix.suffix }}
+          path: kb-${{ matrix.suffix }}
+          retention-days: 1
+
+  publish:
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG_COUNT=$(git tag | wc -l)
+          if [ "$TAG_COUNT" -le 1 ]; then
+            NOTES=$(git log --oneline --no-decorate | head -20)
+          else
+            PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')
+            NOTES=$(git log --oneline --no-decorate "${PREV_TAG}..HEAD")
+          fi
+          {
+            echo "notes<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          name: ${{ needs.release.outputs.tag }}
+          body: |
+            ## Changes
+            ${{ steps.notes.outputs.notes }}
+
+            ## Install
+            ```bash
+            # Download the binary for your platform, e.g. Linux AMD64:
+            wget https://github.com/${{ github.repository }}/releases/latest/download/kb-linux-amd64
+            chmod +x kb-linux-amd64
+            sudo mv kb-linux-amd64 /usr/local/bin/kb
+
+            # Or build from source:
+            go install github.com/${{ github.repository }}@latest
+            ```
+          files: artifacts/*
