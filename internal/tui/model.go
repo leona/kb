@@ -642,12 +642,12 @@ func (m model) View() string {
 	case stateMain:
 		return m.viewDualPane(
 			m.projectsList.View(), m.sharedList.View(),
-			"enter: open  space: cycle global  ←→/hl: switch pane  /: filter  q: quit",
+			refLegend+"enter: open  space: cycle global  ←→/hl: switch pane  /: filter  q: quit",
 		)
 	case stateProjectDetail:
 		return m.viewDualPane(
 			m.detailList.View(), m.sharedRefList.View(),
-			"enter: edit  space: cycle ref↔inline  ←→/hl: switch pane  /: filter  esc: back  q: quit",
+			refLegend+"enter: edit  space: cycle ref↔inline  ←→/hl: switch pane  /: filter  esc: back  q: quit",
 		)
 	case stateSharedFiles:
 		return m.sharedFilesList.View() + "\n" +
