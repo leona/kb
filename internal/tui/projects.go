@@ -41,14 +41,18 @@ func (i sharedRefItem) Description() string {
 		if i.globalMode == "inline" {
 			mode = "inline"
 		}
-		return fmt.Sprintf("global %s — not editable per-project", mode)
+		desc := fmt.Sprintf("global %s — not editable per-project", mode)
+		if len(i.info.UsedBy) > 0 {
+			desc += fmt.Sprintf("\nused by %s", strings.Join(i.info.UsedBy, ", "))
+		}
+		return desc
 	}
 	desc := fmt.Sprintf("%d lines  %d files", i.info.TotalLines, len(i.info.Files))
 	if i.linkMode == "inline" {
 		desc += "  (inline)"
 	}
 	if len(i.info.UsedBy) > 0 {
-		desc += fmt.Sprintf("  used by %s", strings.Join(i.info.UsedBy, ", "))
+		desc += fmt.Sprintf("\nused by %s", strings.Join(i.info.UsedBy, ", "))
 	}
 	return desc
 }
@@ -93,7 +97,7 @@ func (i sharedItem) Description() string {
 		desc += "  (inline)"
 	}
 	if len(i.info.UsedBy) > 0 {
-		desc += fmt.Sprintf("  used by %s", strings.Join(i.info.UsedBy, ", "))
+		desc += fmt.Sprintf("\nused by %s", strings.Join(i.info.UsedBy, ", "))
 	}
 	return desc
 }

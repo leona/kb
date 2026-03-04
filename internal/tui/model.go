@@ -67,13 +67,15 @@ func New(kbRoot, projectName string) model {
 	}
 
 	delegate := list.NewDefaultDelegate()
+	tallDelegate := list.NewDefaultDelegate()
+	tallDelegate.SetHeight(3)
 
 	m.projectsList = list.New(nil, delegate, 0, 0)
 	m.projectsList.Title = "Projects"
 	m.projectsList.SetShowHelp(false)
 	m.projectsList.SetFilteringEnabled(true)
 
-	m.sharedList = list.New(nil, delegate, 0, 0)
+	m.sharedList = list.New(nil, tallDelegate, 0, 0)
 	m.sharedList.Title = "Shared Docs"
 	m.sharedList.SetShowHelp(false)
 	m.sharedList.SetFilteringEnabled(true)
@@ -82,7 +84,7 @@ func New(kbRoot, projectName string) model {
 	m.detailList.SetShowHelp(false)
 	m.detailList.SetFilteringEnabled(true)
 
-	m.sharedRefList = list.New(nil, delegate, 0, 0)
+	m.sharedRefList = list.New(nil, tallDelegate, 0, 0)
 	m.sharedRefList.Title = "Shared Refs"
 	m.sharedRefList.SetShowHelp(false)
 	m.sharedRefList.SetFilteringEnabled(true)
