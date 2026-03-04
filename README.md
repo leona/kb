@@ -1,4 +1,4 @@
-# agent-knowledge-base (`kb`)
+# Agent Knowledge Base
 
 A CLI tool and MCP server for managing markdown knowledge bases across projects. Externalizes project context (CLAUDE.md/AGENT.md) and shared documentation (API docs, specs, workflows) into a central versioned directory, then exposes it to AI coding agents via MCP.
 
@@ -7,9 +7,9 @@ Supports [Claude Code](https://code.claude.com/docs/en/overview), [OpenAI Codex]
 ## Why
 
 - **Context files are scattered** across repos with no way to share docs between projects
-- **API documentation gets duplicated** — the same API docs copied into 3+ repos
-- **No version history** — when you update project context, the old version is gone
-- **Large reference docs waste context** — 9000-line API docs shouldn't load into every session
+- **API documentation gets duplicated** - the same API docs copied into 3+ repos
+- **No version history** - when you update project context, the old version is gone
+- **Large reference docs waste context** - 9000-line API docs shouldn't load into every session
 
 `kb` solves this by centralizing knowledge into `~/knowledge-base/` with:
 - Per-project context that replaces in-repo CLAUDE.md files
