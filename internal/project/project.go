@@ -30,31 +30,20 @@ type Info struct {
 	Files        []string // additional markdown files
 }
 
-// List returns info for all projects in the KB.
+// List returns info for all projects registered in kb.yml.
 func List(kbRoot string) ([]Info, error) {
-	projectsDir := filepath.Join(kbRoot, "projects")
-	entries, err := os.ReadDir(projectsDir)
+	cfg, err := config.Load(kbRoot)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
+		return nil, nil
 	}
 
-	cfg, _ := config.Load(kbRoot)
-
 	var projects []Info
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		info, err := Get(kbRoot, e.Name())
+	for name, path := range cfg.Projects {
+		info, err := Get(kbRoot, name)
 		if err != nil {
 			continue
 		}
-		if cfg != nil {
-			info.Path = cfg.Projects[e.Name()]
-		}
+		info.Path = path
 		projects = append(projects, info)
 	}
 	return projects, nil

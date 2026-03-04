@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/leona/kb/internal/config"
 	"github.com/leona/kb/internal/fs"
@@ -41,7 +42,7 @@ func List(kbRoot string) ([]Info, error) {
 
 	var docs []Info
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		info, err := Get(kbRoot, e.Name())
