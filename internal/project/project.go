@@ -398,10 +398,20 @@ func UpdateRefsInventory(kbRoot, name string) error {
 		effectiveInline = refs.Inline
 	}
 
+	// Discover extra project markdown files.
+	projDir := Dir(kbRoot, name)
+	extraFiles, _ := fs.ListMarkdownFiles(projDir)
+	var projectFiles []string
+	for _, f := range extraFiles {
+		if f != "context.md" {
+			projectFiles = append(projectFiles, f)
+		}
+	}
+
 	var insertBlock strings.Builder
 
-	// Generate KB:REFS block for non-inline refs.
-	if len(effectiveRefs) > 0 {
+	// Generate KB:REFS block for shared docs and extra project files.
+	if len(effectiveRefs) > 0 || len(projectFiles) > 0 {
 		insertBlock.WriteString(refsCommentStart + "\n")
 		for _, slug := range effectiveRefs {
 			sharedInfo, err := shared.Get(kbRoot, slug)
@@ -416,6 +426,12 @@ func UpdateRefsInventory(kbRoot, name string) error {
 			for _, f := range sharedInfo.Files {
 				insertBlock.WriteString(fmt.Sprintf("    kb_read: shared/%s/%s\n", slug, f))
 			}
+		}
+		for _, f := range projectFiles {
+			fullPath := filepath.Join(projDir, f)
+			lines, _ := fs.CountLines(fullPath)
+			insertBlock.WriteString(fmt.Sprintf("  - %s (%d lines)\n", f, lines))
+			insertBlock.WriteString(fmt.Sprintf("    kb_read: projects/%s/%s\n", name, f))
 		}
 		insertBlock.WriteString("  Use kb_search or kb_read to access these docs.\n")
 		insertBlock.WriteString(refsCommentEnd + "\n")
