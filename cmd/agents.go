@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/leona/kb/internal/fs"
@@ -122,3 +123,68 @@ func writeCodexMCPConfig(path, kbBinary string) error {
 func writeOpenCodeMCPConfig(path, kbBinary string) error {
 	return writeJSONMCPConfig(path, kbBinary, "mcp")
 }
+
+// readOnlyKBTools lists the MCP tool names that are safe to auto-allow.
+var readOnlyKBTools = []string{
+	"mcp__kb__kb_context",
+	"mcp__kb__kb_list",
+	"mcp__kb__kb_read",
+	"mcp__kb__kb_search",
+	"mcp__kb__kb_log",
+	"mcp__kb__kb_diff",
+	"mcp__kb__kb_show",
+	"mcp__kb__kb_draft",
+}
+
+// writeClaudePermissions adds read-only KB tools to .claude/settings.json permissions.
+func writeClaudePermissions(projectPath string) error {
+	dir := filepath.Join(projectPath, ".claude")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	path := filepath.Join(dir, "settings.json")
+	var cfg map[string]any
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return fmt.Errorf("parsing %s: %w", path, err)
+		}
+	}
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
+
+	perms, _ := cfg["permissions"].(map[string]any)
+	if perms == nil {
+		perms = map[string]any{}
+	}
+
+	// Merge with existing allow list
+	existing := map[string]bool{}
+	if allow, ok := perms["allow"].([]any); ok {
+		for _, v := range allow {
+			if s, ok := v.(string); ok {
+				existing[s] = true
+			}
+		}
+	}
+	for _, tool := range readOnlyKBTools {
+		existing[tool] = true
+	}
+
+	allow := make([]string, 0, len(existing))
+	for tool := range existing {
+		allow = append(allow, tool)
+	}
+	// Sort for stable output
+	sort.Strings(allow)
+	perms["allow"] = allow
+	cfg["permissions"] = perms
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+

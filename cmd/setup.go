@@ -114,6 +114,9 @@ var setupCmd = &cobra.Command{
 				}
 				fmt.Printf("Will %s: %s (%s)\n", strings.ToLower(action), t.path, t.agent.Name)
 				fmt.Printf("  Add MCP server \"kb\" → %s mcp\n", kbBinary)
+				if t.agent.Kind == agentClaude {
+					fmt.Printf("Will add read-only KB tool permissions to %s\n", filepath.Join(absPath, ".claude", "settings.json"))
+				}
 			}
 			fmt.Printf("Will write import pointers (CLAUDE.md + any AGENT.md/AGENTS.md) → %s\n", kbContextPath)
 			fmt.Println()
@@ -183,6 +186,12 @@ var setupCmd = &cobra.Command{
 			switch t.agent.Kind {
 			case agentClaude:
 				writeErr = writeClaudeMCPConfig(t.path, kbBinary)
+				if writeErr == nil {
+					if err := writeClaudePermissions(absPath); err != nil {
+						return fmt.Errorf("writing Claude permissions: %w", err)
+					}
+					fmt.Printf("Wrote %s (Claude Code permissions)\n", filepath.Join(absPath, ".claude", "settings.json"))
+				}
 			case agentCodex:
 				writeErr = writeCodexMCPConfig(t.path, kbBinary)
 			case agentOpenCode:
