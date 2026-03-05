@@ -463,7 +463,33 @@ func UpdateRefsInventory(kbRoot, name string) error {
 		content = insertAfterHeader(content, insertBlock.String())
 	}
 
-	return os.WriteFile(contextPath, []byte(content), 0644)
+	if err := os.WriteFile(contextPath, []byte(content), 0644); err != nil {
+		return err
+	}
+
+	return BackupContext(cfg, kbRoot, name)
+}
+
+// BackupContext copies context.md to .kb-context.md in the project directory.
+// Silently returns nil if cfg is nil, the project path is not configured,
+// the directory doesn't exist, or the source context.md doesn't exist.
+func BackupContext(cfg *config.Config, kbRoot, name string) error {
+	if cfg == nil {
+		return nil
+	}
+	projectPath := cfg.Projects[name]
+	if projectPath == "" {
+		return nil
+	}
+	if !fs.DirExists(projectPath) {
+		return nil
+	}
+	src := ContextPath(kbRoot, name)
+	if !fs.FileExists(src) {
+		return nil
+	}
+	dst := filepath.Join(projectPath, ".kb-context.md")
+	return fs.CopyFile(src, dst)
 }
 
 // stripInlineBlocks removes all <!-- KB:INLINE slug -->...<!-- /KB:INLINE slug --> blocks.
