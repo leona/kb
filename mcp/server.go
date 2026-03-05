@@ -90,7 +90,7 @@ func Serve() error {
 	), handleRefRemove)
 
 	s.AddTool(mcp.NewTool("kb_draft",
-		mcp.WithDescription("Preview content before writing to the knowledge base. Returns a formatted preview of what would be written without making any changes. IMPORTANT: Always call this before kb_write so the user can review the content first."),
+		mcp.WithDescription("Preview content before writing to the knowledge base. Returns a formatted preview of what would be written without making any changes. IMPORTANT: Always call this before kb_write so the user can review the content first. After calling this tool, display the full preview content to the user — do not summarize or truncate it."),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Relative path within KB (e.g., 'shared/my-shared-doc/api-docs.md' or 'projects/myapp/context.md').")),
 		mcp.WithString("content", mcp.Required(), mcp.Description("The markdown content to preview.")),
 		mcp.WithString("title", mcp.Description("Title for shared doc meta.yml.")),
