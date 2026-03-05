@@ -529,6 +529,14 @@ func stripInlineBlocks(content string) string {
 	return content
 }
 
+// StripGeneratedBlocks removes all auto-generated KB:REFS and KB:INLINE blocks
+// from content. Useful for cleaning up agent-submitted content before writing.
+func StripGeneratedBlocks(content string) string {
+	content = stripRefsComment(content)
+	content = stripInlineBlocks(content)
+	return content
+}
+
 // UpdateAllRefsInventories regenerates the refs inventory for every project.
 // Called when globals change (affects all projects).
 func UpdateAllRefsInventories(kbRoot string) error {
