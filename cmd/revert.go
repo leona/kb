@@ -18,7 +18,10 @@ var revertCmd = &cobra.Command{
 		ref := args[0]
 		filePath := args[1]
 
-		if err := git.Revert(kbRoot, ref, filePath); err != nil {
+		if err := git.RevertFile(kbRoot, ref, filePath); err != nil {
+			return err
+		}
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("revert: %s to %s", filePath, ref)); err != nil {
 			return err
 		}
 

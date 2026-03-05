@@ -36,7 +36,7 @@ Without --hook, commits all pending changes. Used by OpenCode's file_edited hook
 
 func runManualCommit(kbRoot string) error {
 	msg := git.GenerateCommitMessage(kbRoot)
-	if err := git.AutoCommit(kbRoot, msg); err != nil {
+	if err := git.CommitAndPush(kbRoot, msg); err != nil {
 		return fmt.Errorf("commit failed: %w", err)
 	}
 	fmt.Println("Committed KB changes.")
@@ -83,7 +83,7 @@ func runHookCommit(kbRoot string) error {
 	relPath, _ := filepath.Rel(kbRoot, filePath)
 	msg := fmt.Sprintf("auto: update %s", relPath)
 
-	return git.AutoCommit(kbRoot, msg)
+	return git.CommitAndPush(kbRoot, msg)
 }
 
 func init() {

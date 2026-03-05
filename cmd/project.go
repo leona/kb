@@ -35,7 +35,7 @@ var projectInitCmd = &cobra.Command{
 			return err
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("project: init %s", name)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("project: init %s", name)); err != nil {
 			return err
 		}
 
@@ -139,7 +139,7 @@ var projectImportCmd = &cobra.Command{
 		if agentsPath != "" {
 			sources = append(sources, agentsPath)
 		}
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("import: %s from %s", name, strings.Join(sources, ", "))); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("import: %s from %s", name, strings.Join(sources, ", "))); err != nil {
 			return err
 		}
 

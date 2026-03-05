@@ -587,7 +587,7 @@ func handleWrite(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 
 	lines, _ := iofs.CountLines(absPath)
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("write: %s (%d lines)", cleanPath, lines)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("write: %s (%d lines)", cleanPath, lines)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -621,7 +621,7 @@ func handleGlobalAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		linkType = "inline"
 	}
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -647,7 +647,7 @@ func handleGlobalRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	}
 
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -690,7 +690,7 @@ func handleDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		}
 
 		if !request.GetBool("no_commit", false) {
-			if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: shared/%s", slug)); err != nil {
+			if err := git.CommitAndPush(kbRoot, fmt.Sprintf("delete: shared/%s", slug)); err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 			}
 		}
@@ -721,7 +721,7 @@ func handleDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 	}
 
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("delete: %s", cleanPath)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("delete: %s", cleanPath)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -762,7 +762,7 @@ func handleRefAdd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		linkType = "inline"
 	}
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -792,7 +792,7 @@ func handleRefRemove(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	}
 
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -891,7 +891,7 @@ func handleRevert(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 	}
 
 	if !request.GetBool("no_commit", false) {
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("revert: %s to %s", cleanPath, ref)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("revert: %s to %s", cleanPath, ref)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 		}
 	}
@@ -925,7 +925,7 @@ func handleCommit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 		}
 	}
 
-	if err := git.AutoCommit(kbRoot, message); err != nil {
+	if err := git.CommitAndPush(kbRoot, message); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Error committing: %v", err)), nil
 	}
 

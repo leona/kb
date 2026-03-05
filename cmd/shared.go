@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/leona/kb/internal/config"
 	"github.com/leona/kb/internal/fs"
 	"github.com/leona/kb/internal/git"
-	"github.com/leona/kb/internal/config"
 	"github.com/leona/kb/internal/shared"
 	"github.com/spf13/cobra"
 )
@@ -51,7 +51,7 @@ var sharedAddCmd = &cobra.Command{
 			totalLines += lines
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("shared: add %s (%d file(s), %d lines)", slug, len(files), totalLines)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("shared: add %s (%d file(s), %d lines)", slug, len(files), totalLines)); err != nil {
 			return err
 		}
 

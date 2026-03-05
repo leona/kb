@@ -163,7 +163,7 @@ var setupCmd = &cobra.Command{
 
 		// Auto-commit any KB changes
 		if created || needsPathUpdate {
-			if err := git.AutoCommit(kbRoot, fmt.Sprintf("setup: register %s", projectName)); err != nil {
+			if err := git.CommitAndPush(kbRoot, fmt.Sprintf("setup: register %s", projectName)); err != nil {
 				return fmt.Errorf("committing registration: %w", err)
 			}
 		}

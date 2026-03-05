@@ -41,7 +41,7 @@ var globalAddCmd = &cobra.Command{
 		if inline {
 			linkType = "inline"
 		}
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("global: add %s (%s)", slug, linkType)); err != nil {
 			return err
 		}
 
@@ -65,7 +65,7 @@ var globalRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("global: remove %s", slug)); err != nil {
 			return err
 		}
 

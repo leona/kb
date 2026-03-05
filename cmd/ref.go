@@ -44,7 +44,7 @@ var refAddCmd = &cobra.Command{
 		if inline {
 			linkType = "inline"
 		}
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("ref: link %s → %s (%s)", projectName, slug, linkType)); err != nil {
 			return err
 		}
 
@@ -69,7 +69,7 @@ var refRemoveCmd = &cobra.Command{
 			return err
 		}
 
-		if err := git.AutoCommit(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
+		if err := git.CommitAndPush(kbRoot, fmt.Sprintf("ref: unlink %s → %s", projectName, slug)); err != nil {
 			return err
 		}
 
