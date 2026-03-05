@@ -99,6 +99,7 @@ kb
 - Launched outside a project → shows all projects and shared docs in dual-pane view
 - Launched inside a registered project → jumps to that project's detail view
 - Navigate with arrow keys or `h`/`l`, `tab` to switch panes, `/` to filter, Enter to open, Esc to go back
+- Space to toggle ref/inline mode (project detail) or cycle global status (main view)
 - `q` or `Ctrl+C` to quit
 
 ### Agent Usage
@@ -131,7 +132,7 @@ c7d8e9f 2026-03-04 02:18 import: my-project from ~/repos/my-project/CLAUDE.md
 
 ## MCP Server Tools
 
-When configured, agents get 15 tools:
+When configured, agents get 16 tools:
 
 | Tool | Description |
 |---|---|
@@ -150,6 +151,7 @@ When configured, agents get 15 tools:
 | `kb_ref_remove` | Unlink a shared doc from a project. |
 | `kb_global_add` | Mark a shared doc as globally available to all projects. Supports `inline`. |
 | `kb_global_remove` | Remove a shared doc from globals. |
+| `kb_commit` | Commit pending changes. Use after mutations with `no_commit=true`. |
 
 The `kb_draft` → `kb_write` workflow ensures agents preview changes before persisting them.
 
@@ -262,7 +264,7 @@ Shared docs can be linked in two modes:
 | `kb project list` | List all projects |
 | `kb project show <NAME>` | Show project details and context |
 | `kb shared add <SLUG> <FILES...>` | Add shared documents to the KB |
-| `kb shared list` | List shared documents with usage info |
+| `kb shared list` | List shared documents with usage and line counts |
 | `kb ref add <PROJECT> <SLUG> [--inline]` | Link a shared doc to a project |
 | `kb ref remove <PROJECT> <SLUG>` | Unlink a shared doc from a project |
 | `kb global add <SLUG> [--inline]` | Make a shared doc available to all projects |
@@ -275,5 +277,6 @@ Shared docs can be linked in two modes:
 | `kb diff [SCOPE]` | Show uncommitted changes |
 | `kb revert <REF> <PATH>` | Revert a file to a previous version |
 | `kb commit` | Manually commit pending KB changes |
+| `kb graph` | Show ASCII reference graph of projects and shared docs |
 | `kb version` | Print version information |
 | `kb mcp` | Start MCP server (stdio transport) |
