@@ -37,6 +37,7 @@ type model struct {
 
 	projectName string
 	editor      string
+	autoPush    bool
 
 	// stateMain
 	projectsList list.Model // left
@@ -56,14 +57,17 @@ type model struct {
 // New creates a new TUI model. If projectName is non-empty, starts on project detail view.
 func New(kbRoot, projectName string) model {
 	editor := "vi"
+	autoPush := false
 	if cfg, err := config.Load(kbRoot); err == nil {
 		editor = cfg.GetEditor()
+		autoPush = cfg.AutoPush
 	}
 
 	m := model{
 		kbRoot:      kbRoot,
 		projectName: projectName,
 		editor:      editor,
+		autoPush:    autoPush,
 	}
 
 	delegate := list.NewDefaultDelegate()
@@ -296,25 +300,21 @@ func (m model) loadSharedFiles(slug string) tea.Cmd {
 func (m model) toggleRef(slug, linkMode string) tea.Cmd {
 	return func() tea.Msg {
 		var err error
-		var action string
 		switch linkMode {
 		case "": // unlinked → ref
-			action = "link"
 			err = project.AddRef(m.kbRoot, m.projectName, slug, false)
 		case "ref": // ref → inline
-			action = "inline"
 			err = project.RemoveRef(m.kbRoot, m.projectName, slug)
 			if err == nil {
 				err = project.AddRef(m.kbRoot, m.projectName, slug, true)
 			}
 		case "inline": // inline → unlinked
-			action = "unlink"
 			err = project.RemoveRef(m.kbRoot, m.projectName, slug)
 		}
 		if err != nil {
 			return refToggledMsg{err: err}
 		}
-		_ = git.AutoCommit(m.kbRoot, fmt.Sprintf("ref: %s %s → %s", action, m.projectName, slug))
+		git.DebouncedCommitAndPush(m.kbRoot, m.autoPush)
 		return refToggledMsg{}
 	}
 }
@@ -322,25 +322,21 @@ func (m model) toggleRef(slug, linkMode string) tea.Cmd {
 func (m model) toggleGlobal(slug, globalMode string) tea.Cmd {
 	return func() tea.Msg {
 		var err error
-		var action string
 		switch globalMode {
 		case "": // not global → global ref
-			action = "global"
 			err = project.AddGlobal(m.kbRoot, slug, false)
 		case "global": // global ref → global inline
-			action = "global-inline"
 			err = project.RemoveGlobal(m.kbRoot, slug)
 			if err == nil {
 				err = project.AddGlobal(m.kbRoot, slug, true)
 			}
 		case "inline": // global inline → not global
-			action = "unglobal"
 			err = project.RemoveGlobal(m.kbRoot, slug)
 		}
 		if err != nil {
 			return globalToggledMsg{err: err}
 		}
-		_ = git.AutoCommit(m.kbRoot, fmt.Sprintf("global: %s %s", action, slug))
+		git.DebouncedCommitAndPush(m.kbRoot, m.autoPush)
 		return globalToggledMsg{}
 	}
 }

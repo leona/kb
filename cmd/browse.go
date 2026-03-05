@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/leona/kb/internal/config"
+	"github.com/leona/kb/internal/git"
 	"github.com/leona/kb/internal/project"
 	"github.com/leona/kb/internal/tui"
 	"github.com/spf13/cobra"
@@ -23,6 +24,7 @@ var browseCmd = &cobra.Command{
 		m := tui.New(kbRoot, projectName)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		finalModel, err := p.Run()
+		git.FlushDebounce()
 		if err != nil {
 			return fmt.Errorf("running TUI: %w", err)
 		}
