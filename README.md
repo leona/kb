@@ -130,6 +130,10 @@ c7d8e9f 2026-03-04 02:18 import: my-project from ~/repos/my-project/CLAUDE.md
 0a6b0f2 2026-03-04 02:07 init: knowledge base
 ```
 
+### Auto-push
+
+`kb init` offers to set up a git remote and enable auto-push. When enabled (`auto_push: true` in `kb.yml`), every commit is automatically pushed to the remote in the background.
+
 ## MCP Server Tools
 
 When configured, agents get 16 tools:
@@ -244,6 +248,10 @@ The repo's CLAUDE.md becomes a single `@import` pointer. Claude Code expands thi
 ```
 
 This directive ensures agents edit the KB file (versioned, centralized) rather than the repo's pointer file.
+
+### Context backup
+
+When context.md is updated, `kb` copies it to `.kb-context.md` in the project directory. This keeps a versioned copy of the project context alongside your code.
 
 ## Ref vs Inline
 

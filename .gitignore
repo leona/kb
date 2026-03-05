@@ -3,3 +3,4 @@ kb
 !cmd/
 CLAUDE.md
 .codex/
+.kb-context.md
