@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 	"strings"
 	"time"
 
+	"github.com/leona/kb/internal/config"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -193,14 +196,6 @@ func Show(kbRoot, ref, filePath string) (string, error) {
 	return content, nil
 }
 
-// Revert restores a file to a previous version and auto-commits.
-func Revert(kbRoot, ref, filePath string) error {
-	if err := RevertFile(kbRoot, ref, filePath); err != nil {
-		return err
-	}
-	return AutoCommit(kbRoot, fmt.Sprintf("revert: %s to %s", filePath, ref))
-}
-
 // RevertFile restores a file to a previous version without committing.
 func RevertFile(kbRoot, ref, filePath string) error {
 	content, err := Show(kbRoot, ref, filePath)
@@ -213,6 +208,102 @@ func RevertFile(kbRoot, ref, filePath string) error {
 		return fmt.Errorf("writing file: %w", err)
 	}
 
+	return nil
+}
+
+var (
+	debounceMu    sync.Mutex
+	debounceTimer *time.Timer
+	debounceRoot  string
+	debouncePush  bool
+)
+
+// DebouncedCommitAndPush batches rapid mutations into a single commit+push
+// after 4 seconds of inactivity. Use for interactive contexts (TUI).
+func DebouncedCommitAndPush(kbRoot string, push bool) {
+	debounceMu.Lock()
+	defer debounceMu.Unlock()
+	debounceRoot = kbRoot
+	if push {
+		debouncePush = true
+	}
+	if debounceTimer != nil {
+		debounceTimer.Stop()
+	}
+	debounceTimer = time.AfterFunc(4*time.Second, func() {
+		flushDebounce()
+	})
+}
+
+// flushDebounce runs the debounced commit+push synchronously.
+func flushDebounce() {
+	msg := GenerateCommitMessage(debounceRoot)
+	_ = AutoCommit(debounceRoot, msg)
+	if debouncePush {
+		cmd := exec.Command("git", "-C", debounceRoot, "push")
+		_ = cmd.Run()
+		debouncePush = false
+	}
+}
+
+// FlushDebounce fires any pending debounced commit synchronously.
+// Call before process exit to avoid losing changes.
+func FlushDebounce() {
+	debounceMu.Lock()
+	defer debounceMu.Unlock()
+	if debounceTimer != nil && debounceTimer.Stop() {
+		flushDebounce()
+	}
+}
+
+// PushWithUpstream runs git push -u origin HEAD for first push on fresh repos.
+// This runs synchronously since the user needs to see if initial setup succeeded.
+func PushWithUpstream(kbRoot string) error {
+	cmd := exec.Command("git", "-C", kbRoot, "push", "-u", "origin", "HEAD")
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("push failed: %w", err)
+	}
+	return nil
+}
+
+// AddRemote adds or updates the origin remote URL.
+func AddRemote(kbRoot, url string) error {
+	cmd := exec.Command("git", "-C", kbRoot, "remote", "add", "origin", url)
+	if err := cmd.Run(); err != nil {
+		// origin may already exist — try set-url instead
+		cmd = exec.Command("git", "-C", kbRoot, "remote", "set-url", "origin", url)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("setting remote: %w", err)
+		}
+	}
+	return nil
+}
+
+// HasRemote returns true if an origin remote is configured.
+func HasRemote(kbRoot string) bool {
+	cmd := exec.Command("git", "-C", kbRoot, "remote", "get-url", "origin")
+	return cmd.Run() == nil
+}
+
+// CommitAndPush loads config, commits, and pushes if auto_push is enabled.
+func CommitAndPush(kbRoot, message string) error {
+	cfg, _ := config.Load(kbRoot)
+	push := cfg != nil && cfg.AutoPush
+	return AutoCommitAndPush(kbRoot, message, push)
+}
+
+// AutoCommitAndPush commits immediately and optionally pushes in the background.
+func AutoCommitAndPush(kbRoot, message string, push bool) error {
+	if err := AutoCommit(kbRoot, message); err != nil {
+		return err
+	}
+	if push {
+		go func() {
+			cmd := exec.Command("git", "-C", kbRoot, "push")
+			_ = cmd.Run()
+		}()
+	}
 	return nil
 }
 

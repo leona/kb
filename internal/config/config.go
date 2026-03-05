@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Version       int               `yaml:"version"`
 	Editor        string            `yaml:"editor,omitempty"`
+	AutoPush      bool              `yaml:"auto_push,omitempty"`      // push after every commit
 	Globals       []string          `yaml:"globals,omitempty"`        // shared doc slugs available to all projects
 	InlineGlobals []string          `yaml:"inline_globals,omitempty"` // shared doc slugs inlined into all projects' context.md
 	Projects      map[string]string `yaml:"projects,omitempty"`       // name → absolute path
