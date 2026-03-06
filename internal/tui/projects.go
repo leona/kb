@@ -83,9 +83,9 @@ type sharedItem struct {
 func (i sharedItem) Title() string {
 	switch i.globalMode {
 	case "global":
-		return "✓ " + i.info.Slug
+		return "✓ " + i.info.Slug + " [GLOBAL]"
 	case "inline":
-		return "▪ " + i.info.Slug
+		return "▪ " + i.info.Slug + " [GLOBAL]"
 	default:
 		return "  " + i.info.Slug
 	}

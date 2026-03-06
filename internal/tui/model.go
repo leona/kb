@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,8 +19,8 @@ import (
 type state int
 
 const (
-	stateMain          state = iota // dual pane: projects (left) + shared docs (right)
-	stateProjectDetail             // dual pane: project files (left) + shared refs (right)
+	stateMain          state = iota // dual pane: projects (left) + global refs (right)
+	stateProjectDetail             // dual pane: project files (left) + project refs (right)
 	stateSharedFiles               // single pane: files in a shared doc
 )
 
@@ -45,7 +46,7 @@ type model struct {
 
 	// stateProjectDetail
 	detailList    list.Model // left (project files)
-	sharedRefList list.Model // right (all shared docs with ref status)
+	sharedRefList list.Model // right (all shared docs with project ref status)
 
 	// stateSharedFiles
 	sharedFilesList list.Model // single pane
@@ -80,7 +81,7 @@ func New(kbRoot, projectName string) model {
 	m.projectsList.SetFilteringEnabled(true)
 
 	m.sharedList = list.New(nil, tallDelegate, 0, 0)
-	m.sharedList.Title = "Shared Docs"
+	m.sharedList.Title = "Global Refs"
 	m.sharedList.SetShowHelp(false)
 	m.sharedList.SetFilteringEnabled(true)
 
@@ -89,7 +90,7 @@ func New(kbRoot, projectName string) model {
 	m.detailList.SetFilteringEnabled(true)
 
 	m.sharedRefList = list.New(nil, tallDelegate, 0, 0)
-	m.sharedRefList.Title = "Shared Refs"
+	m.sharedRefList.Title = "Project Refs"
 	m.sharedRefList.SetShowHelp(false)
 	m.sharedRefList.SetFilteringEnabled(true)
 
@@ -142,7 +143,7 @@ type editorFinishedMsg struct{ err error }
 func (m model) Init() tea.Cmd {
 	load := tea.Batch(m.loadProjects(), m.loadShared())
 	if m.state == stateProjectDetail {
-		return tea.Batch(load, m.loadProjectDetail(m.projectName))
+		return tea.Batch(load, m.loadProjectDetail(m.projectName, true))
 	}
 	return load
 }
@@ -190,11 +191,17 @@ func (m model) loadShared() tea.Cmd {
 			}
 			items[i] = sharedItem{info: d, globalMode: mode}
 		}
+		sort.SliceStable(items, func(i, j int) bool {
+			a := items[i].(sharedItem).globalMode
+			b := items[j].(sharedItem).globalMode
+			return a != "" && b == ""
+		})
 		return loadSharedMsg{items: items}
 	}
 }
 
-func (m model) loadProjectDetail(name string) tea.Cmd {
+func (m model) loadProjectDetail(name string, sortLinked ...bool) tea.Cmd {
+	doSort := len(sortLinked) > 0 && sortLinked[0]
 	return func() tea.Msg {
 		info, err := project.Get(m.kbRoot, name)
 		if err != nil {
@@ -266,6 +273,13 @@ func (m model) loadProjectDetail(name string) tea.Cmd {
 			} else {
 				otherItems = append(otherItems, item)
 			}
+		}
+		if doSort {
+			sort.SliceStable(otherItems, func(i, j int) bool {
+				a := otherItems[i].(sharedRefItem).linkMode
+				b := otherItems[j].(sharedRefItem).linkMode
+				return a != "" && b == ""
+			})
 		}
 		refItems := append(globalItems, otherItems...)
 
@@ -371,6 +385,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.projectsList.SetItems(msg.items)
+		if m.projectName != "" {
+			for i, item := range msg.items {
+				if p, ok := item.(projectItem); ok && p.info.Name == m.projectName {
+					m.projectsList.Select(i)
+					break
+				}
+			}
+		}
 		return m, nil
 
 	case loadSharedMsg:
@@ -406,14 +428,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.sharedRefList.NewStatusMessage(fmt.Sprintf("Error: %v", msg.err))
 			return m, cmd
 		}
-		return m, m.loadProjectDetail(m.projectName)
+		// Update the toggled item in-place to preserve list order.
+		idx := m.sharedRefList.Index()
+		if item, ok := m.sharedRefList.SelectedItem().(sharedRefItem); ok {
+			switch item.linkMode {
+			case "":
+				item.linkMode = "ref"
+			case "ref":
+				item.linkMode = "inline"
+			case "inline":
+				item.linkMode = ""
+			}
+			cmd := m.sharedRefList.SetItem(idx, item)
+			return m, cmd
+		}
+		return m, nil
 
 	case globalToggledMsg:
 		if msg.err != nil {
 			cmd := m.sharedList.NewStatusMessage(fmt.Sprintf("Error: %v", msg.err))
 			return m, cmd
 		}
-		return m, m.loadShared()
+		// Update the toggled item in-place to preserve list order.
+		idx := m.sharedList.Index()
+		if item, ok := m.sharedList.SelectedItem().(sharedItem); ok {
+			switch item.globalMode {
+			case "":
+				item.globalMode = "global"
+			case "global":
+				item.globalMode = "inline"
+			case "inline":
+				item.globalMode = ""
+			}
+			cmd := m.sharedList.SetItem(idx, item)
+			return m, cmd
+		}
+		return m, nil
 
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -486,7 +536,7 @@ func (m model) updateMain(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if ok {
 					m.state = stateProjectDetail
 					m.focus = paneLeft
-					return m, m.loadProjectDetail(item.info.Name)
+					return m, m.loadProjectDetail(item.info.Name, true)
 				}
 			} else {
 				item, ok := m.sharedList.SelectedItem().(sharedItem)
@@ -555,7 +605,7 @@ func (m model) updateProjectDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.state = stateMain
 			m.focus = paneLeft
-			return m, nil
+			return m, m.loadShared()
 		case "enter":
 			if m.focus == paneLeft {
 				item, ok := m.detailList.SelectedItem().(fileItem)
